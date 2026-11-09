@@ -1,0 +1,6 @@
+.gradle-home
+.local
+**/build
+**/node_modules
+web/dist
+reports/runtime

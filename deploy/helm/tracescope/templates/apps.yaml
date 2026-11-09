@@ -1,0 +1,129 @@
+{{- range $role := list "server" "web" "gateway" "checkout" "payment" "inventory" }}
+{{- $shop := not (or (eq $role "server") (eq $role "web")) }}
+{{- $resources := $.Values.shop.resources }}
+{{- if not $shop }}{{- $resources = index $.Values $role "resources" }}{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tracescope.name" $ }}-{{ $role }}
+  labels:
+    {{- include "tracescope.labels" $ | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ $role }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tracescope.name" $ }}-{{ $role }}
+  labels:
+    {{- include "tracescope.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  {{- if eq $role "server" }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $role }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: {{ $role }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ if eq $role "web" }}101{{ else }}10001{{ end }}
+        runAsGroup: {{ if eq $role "web" }}101{{ else }}10001{{ end }}
+        fsGroup: {{ if eq $role "web" }}101{{ else }}10001{{ end }}
+      {{- if or (eq $role "server") (eq $role "payment") (eq $role "inventory") }}
+      initContainers:
+        - name: wait-for-databases
+          image: {{ $.Values.images.init | quote }}
+          command: [sh, -c, 'until nc -z {{ include "tracescope.name" $ }}-postgres 5432{{ if eq $role "server" }} && nc -z {{ include "tracescope.name" $ }}-clickhouse 8123{{ end }}; do sleep 2; done']
+          securityContext:
+            {{- include "tracescope.containerSecurity" $ | nindent 12 }}
+          resources:
+            requests: {cpu: 10m, memory: 8Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+      {{- end }}
+      containers:
+        - name: {{ $role }}
+          image: {{ if $shop }}{{ $.Values.images.shop | quote }}{{ else }}{{ index $.Values.images $role | quote }}{{ end }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          securityContext:
+            {{- include "tracescope.containerSecurity" $ | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            {{- if eq $role "web" }}
+            - name: BACKEND_HOST
+              value: {{ printf "%s-server:8080" (include "tracescope.name" $) | quote }}
+            {{- else }}
+            - {name: POSTGRES_USER, value: tracescope}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "tracescope.name" $ }}, key: postgres-password}
+            {{- if eq $role "server" }}
+            - name: POSTGRES_URL
+              value: jdbc:postgresql://{{ include "tracescope.name" $ }}-postgres:5432/tracescope
+            - name: CLICKHOUSE_URL
+              value: http://{{ include "tracescope.name" $ }}-clickhouse:8123
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "tracescope.name" $ }}, key: clickhouse-password}
+            - name: MCP_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ include "tracescope.name" $ }}, key: mcp-token}
+            - {name: SAMPLING_RATE, value: {{ $.Values.server.samplingRate | quote }}}
+            {{- else }}
+            - {name: SERVICE_ROLE, value: {{ $role | quote }}}
+            - {name: OTEL_SERVICE_NAME, value: {{ $role | quote }}}
+            - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf}
+            - {name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, value: 'http://{{ include "tracescope.name" $ }}-server:8080/v1/traces'}
+            - {name: OTEL_METRICS_EXPORTER, value: none}
+            - {name: OTEL_LOGS_EXPORTER, value: none}
+            - {name: OTEL_TRACES_SAMPLER, value: always_on}
+            - {name: OTEL_BSP_SCHEDULE_DELAY, value: '1000'}
+            - {name: CHECKOUT_URL, value: 'http://{{ include "tracescope.name" $ }}-checkout:8080'}
+            - {name: PAYMENT_URL, value: 'http://{{ include "tracescope.name" $ }}-payment:8080'}
+            - {name: INVENTORY_URL, value: 'http://{{ include "tracescope.name" $ }}-inventory:8080'}
+            - name: SHOP_POSTGRES_URL
+              value: jdbc:postgresql://{{ include "tracescope.name" $ }}-postgres:5432/{{ if eq $role "inventory" }}inventory{{ else }}payments{{ end }}
+            - name: CHAOS_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ include "tracescope.name" $ }}, key: chaos-token}
+            {{- end }}
+            {{- end }}
+          resources:
+            {{- $resources | toYaml | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: {{ if eq $role "web" }}/health{{ else }}/actuator/health/readiness{{ end }}
+              port: http
+            periodSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: {{ if eq $role "web" }}/health{{ else }}/actuator/health/readiness{{ end }}
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: {{ if eq $role "web" }}/health{{ else }}/actuator/health/liveness{{ end }}
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 3
+---
+{{- end }}

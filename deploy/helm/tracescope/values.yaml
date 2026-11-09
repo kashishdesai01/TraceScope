@@ -1,0 +1,48 @@
+images:
+  server: tracescope-server:local
+  web: tracescope-web:local
+  shop: tracescope-demo-shop:local
+  clickhouse: clickhouse/clickhouse-server:26.8@sha256:d426d2f612e1e189c90f9a3f8dcd85a03c6851273833817a296bb327e63aa7a7
+  postgres: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+  k6: grafana/k6:1.4.2@sha256:3656673de3f30424e8ebcfa46acd9558d83b6a43612d0f668ffeac953950c6c7
+  init: alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
+imagePullPolicy: IfNotPresent
+server:
+  replicas: 1
+  samplingRate: 0.25
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: '1', memory: 512Mi}
+web:
+  resources:
+    requests: {cpu: 20m, memory: 16Mi}
+    limits: {cpu: 200m, memory: 64Mi}
+shop:
+  roles: [gateway, checkout, payment, inventory]
+  resources:
+    requests: {cpu: 100m, memory: 192Mi}
+    limits: {cpu: '1', memory: 384Mi}
+clickhouse:
+  storage: 2Gi
+  storageClass: ''
+  resources:
+    requests: {cpu: 200m, memory: 512Mi}
+    limits: {cpu: '1', memory: 1Gi}
+postgres:
+  storage: 1Gi
+  storageClass: ''
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+secrets:
+  postgresPassword: local-tracescope
+  clickhousePassword: local-tracescope
+  chaosToken: local-chaos-token
+  mcpToken: local-mcp-token
+loadgen:
+  enabled: false
+  duration: 60s
+  rate: 20
+  resources:
+    requests: {cpu: 50m, memory: 32Mi}
+    limits: {cpu: 500m, memory: 256Mi}

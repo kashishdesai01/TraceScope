@@ -1,0 +1,66 @@
+{{- if .Values.loadgen.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tracescope.name" . }}-loadgen
+data:
+  steady.js: |
+    import http from 'k6/http';
+    import { check } from 'k6';
+    export const options = {
+      scenarios: { checkout: { executor: 'constant-arrival-rate', rate: {{ .Values.loadgen.rate }}, timeUnit: '1s', duration: {{ .Values.loadgen.duration | quote }}, preAllocatedVUs: 100, maxVUs: 100 } },
+      thresholds: { http_req_failed: ['rate==0'], checks: ['rate==1'], dropped_iterations: ['count==0'] }
+    };
+    export default function () { check(http.post(__ENV.BASE_URL + '/api/checkout', null), { 'checkout succeeded': r => r.status === 200 }); }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "tracescope.name" . }}-loadgen
+  labels:
+    {{- include "tracescope.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 240
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: loadgen
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 12345
+        runAsGroup: 12345
+      initContainers:
+        - name: wait-for-shop
+          image: {{ .Values.images.init | quote }}
+          command: [sh, -c, 'for role in gateway checkout payment inventory; do until wget -q -O /dev/null http://{{ include "tracescope.name" . }}-$role:8080/actuator/health/readiness; do sleep 2; done; done']
+          securityContext:
+            {{- include "tracescope.containerSecurity" . | nindent 12 }}
+          resources:
+            requests: {cpu: 10m, memory: 8Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+      containers:
+        - name: k6
+          image: {{ .Values.images.k6 | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          securityContext:
+            {{- include "tracescope.containerSecurity" . | nindent 12 }}
+          args: [run, /scripts/steady.js]
+          env:
+            - name: BASE_URL
+              value: http://{{ include "tracescope.name" . }}-gateway:8080
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            {{- .Values.loadgen.resources | toYaml | nindent 12 }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "tracescope.name" . }}-loadgen
+{{- end }}

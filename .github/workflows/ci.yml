@@ -1,0 +1,92 @@
+name: verify
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24.14.1'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: ./gradlew check -x :tests:acceptance:test --no-daemon
+      - run: TRACESCOPE_ACCEPTANCE=true ./gradlew :tests:acceptance:test --tests dev.tracescope.acceptance.HarnessPolicyTest --no-daemon
+      - run: npm --prefix web ci --no-fund --no-audit
+      - run: npm --prefix web run format:check
+      - run: npm --prefix web run build
+      - run: npm --prefix web test
+      - run: npm --prefix web audit --omit=dev
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: checks
+          path: |
+            **/build/test-results/
+            **/build/reports/tests/
+  acceptance:
+    needs: checks
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24.14.1'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci --no-fund --no-audit
+      - run: cd web && npx playwright install --with-deps chromium
+      - run: ./scripts/compose.sh build server payment web
+      - run: ./scripts/acceptance.sh
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: ground-truth
+          path: |
+            reports/acceptance.md
+            reports/runtime/
+            tests/acceptance/build/test-results/
+  kubernetes:
+    needs: checks
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 scripts/install-local-tools.py
+      - run: ./scripts/compose.sh build server payment web
+      - run: ./scripts/verify-kind.sh
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: kubernetes
+          path: |
+            reports/kubernetes.md
+            reports/runtime/

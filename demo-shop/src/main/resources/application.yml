@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: ${SERVICE_ROLE:gateway}
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SHOP_POSTGRES_URL:jdbc:postgresql://postgres:5432/payments}
+    username: ${POSTGRES_USER:tracescope}
+    password: ${POSTGRES_PASSWORD:local-tracescope}
+    hikari:
+      maximum-pool-size: 32
+      minimum-idle: 2
+      idle-timeout: 30000
+management:
+  health:
+    db:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+shop:
+  role: ${SERVICE_ROLE:gateway}
+  chaos-token: ${CHAOS_TOKEN:local-chaos-token}
+  checkout-url: ${CHECKOUT_URL:http://checkout:8080}
+  payment-url: ${PAYMENT_URL:http://payment:8080}
+  inventory-url: ${INVENTORY_URL:http://inventory:8080}
+  payment-unavailable-url: ${PAYMENT_UNAVAILABLE_URL:http://payment-unavailable:1}
+  inventory-unavailable-url: ${INVENTORY_UNAVAILABLE_URL:http://inventory-unavailable:1}

@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "tracescope.name" . }}-postgres-init
+data:
+  01-databases.sql: |
+    CREATE DATABASE payments OWNER tracescope;
+    CREATE DATABASE inventory OWNER tracescope;
+---
+{{- range $role := list "postgres" "clickhouse" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "tracescope.name" $ }}-{{ $role }}
+  labels:
+    {{- include "tracescope.labels" $ | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ $role }}
+  ports:
+    - name: database
+      port: {{ if eq $role "postgres" }}5432{{ else }}8123{{ end }}
+      targetPort: database
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "tracescope.name" $ }}-{{ $role }}
+  labels:
+    {{- include "tracescope.labels" $ | nindent 4 }}
+spec:
+  serviceName: {{ include "tracescope.name" $ }}-{{ $role }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $role }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: {{ $role }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ if eq $role "postgres" }}70{{ else }}101{{ end }}
+        runAsGroup: {{ if eq $role "postgres" }}70{{ else }}101{{ end }}
+        fsGroup: {{ if eq $role "postgres" }}70{{ else }}101{{ end }}
+      containers:
+        - name: {{ $role }}
+          image: {{ index $.Values.images $role | quote }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          securityContext:
+            {{- include "tracescope.containerSecurity" $ | nindent 12 }}
+          ports:
+            - name: database
+              containerPort: {{ if eq $role "postgres" }}5432{{ else }}8123{{ end }}
+          env:
+            {{- if eq $role "postgres" }}
+            - {name: POSTGRES_DB, value: tracescope}
+            - {name: POSTGRES_USER, value: tracescope}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "tracescope.name" $ }}, key: postgres-password}
+            {{- else }}
+            - {name: CLICKHOUSE_DB, value: tracescope}
+            - {name: CLICKHOUSE_USER, value: tracescope}
+            - {name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT, value: '1'}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "tracescope.name" $ }}, key: clickhouse-password}
+            {{- end }}
+          resources:
+            {{- index $.Values $role "resources" | toYaml | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ if eq $role "postgres" }}/var/lib/postgresql/data{{ else }}/var/lib/clickhouse{{ end }}
+            {{- if eq $role "postgres" }}
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            {{- end }}
+          readinessProbe:
+            exec:
+              command:
+                {{- if eq $role "postgres" }}
+                - sh
+                - -c
+                - pg_isready -U tracescope -d tracescope
+                {{- else }}
+                - sh
+                - -c
+                - clickhouse-client --user tracescope --password "$CLICKHOUSE_PASSWORD" --query 'SELECT 1'
+                {{- end }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket:
+              port: database
+            initialDelaySeconds: 60
+            periodSeconds: 15
+      {{- if eq $role "postgres" }}
+      volumes:
+        - name: init
+          configMap:
+            name: {{ include "tracescope.name" $ }}-postgres-init
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if index $.Values $role "storageClass" }}
+        storageClassName: {{ index $.Values $role "storageClass" | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ index $.Values $role "storage" }}
+---
+{{- end }}

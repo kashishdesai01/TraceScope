@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: tracescope
+  task:
+    scheduling:
+      pool:
+        size: 2
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/tracescope}
+    username: ${POSTGRES_USER:tracescope}
+    password: ${POSTGRES_PASSWORD:local-tracescope}
+    hikari:
+      maximum-pool-size: 5
+  ai:
+    mcp:
+      server:
+        name: tracescope
+        version: 0.1.0
+        protocol: STREAMABLE
+        type: SYNC
+        streamable-http:
+          mcp-endpoint: /mcp
+server:
+  tomcat:
+    max-swallow-size: 4MB
+    max-http-form-post-size: 4MB
+  error:
+    include-message: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+tracescope:
+  clickhouse-url: ${CLICKHOUSE_URL:http://localhost:8123}
+  clickhouse-user: ${CLICKHOUSE_USER:tracescope}
+  clickhouse-password: ${CLICKHOUSE_PASSWORD:local-tracescope}
+  mcp-token: ${MCP_TOKEN:local-mcp-token}
+  sampling-rate: ${SAMPLING_RATE:0.25}
+  max-spans: ${MAX_BUFFER_SPANS:20000}
+  max-bytes: ${MAX_BUFFER_BYTES:67108864}
+  max-identities: ${MAX_IDENTITIES:250000}
+  max-keys: ${MAX_AGGREGATE_KEYS:10000}
+  max-frames: ${MAX_WRITER_FRAMES:2000}
+  max-trace-spans: ${MAX_TRACE_SPANS:1000}
+  idle-ms: ${TRACE_IDLE_MS:3000}
+  flush-ms: ${FLUSH_MS:10000}

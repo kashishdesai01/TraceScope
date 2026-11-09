@@ -1,0 +1,14 @@
+.git
+.gradle
+.gradle-home
+**/build
+**/node_modules
+web/dist
+reports/runtime
+.env
+
+.local
+web/test-results
+web/tsconfig.tsbuildinfo
+
+**/__pycache__/

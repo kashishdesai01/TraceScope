@@ -1,0 +1,10 @@
+TraceScope runs as a single-node local demonstration. Server replicas must remain 1.
+
+Open the UI:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "tracescope.name" . }}-web 3000:8080
+
+Connect an MCP client (replace the local token if overridden):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "tracescope.name" . }}-server 8080:8080
+
+Persistent volumes outlive Helm uninstall. Default credentials are for local synthetic data only.
+Metrics use closed UTC minute windows; raw trace lookup is available before those windows close.

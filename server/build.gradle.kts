@@ -1,0 +1,26 @@
+plugins { alias(libs.plugins.spring.boot); alias(libs.plugins.spring.dependencies) }
+extra["opentelemetry.version"] = "1.57.0"
+dependencies {
+    implementation(project(":libs:trace-model"))
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.flywaydb:flyway-database-postgresql")
+    implementation("org.postgresql:postgresql")
+    implementation(libs.clickhouse.client)
+    implementation(libs.clickhouse.jdbc)
+    implementation(platform("org.springframework.ai:spring-ai-bom:1.1.2"))
+    implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation(platform(libs.testcontainers.bom))
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:clickhouse")
+    testImplementation("org.testcontainers:postgresql")
+    testImplementation("io.opentelemetry:opentelemetry-sdk:1.57.0")
+    testImplementation("io.opentelemetry:opentelemetry-exporter-otlp:1.57.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}

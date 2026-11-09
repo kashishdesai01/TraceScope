@@ -1,0 +1,19 @@
+[versions]
+spring-boot = "3.5.10"
+spring-dependencies = "1.1.7"
+otlp-proto = "1.9.0-alpha"
+clickhouse = "0.9.4"
+spring-ai = "1.1.2"
+junit = "5.12.2"
+jqwik = "1.9.3"
+testcontainers = "1.21.4"
+[libraries]
+otlp-proto = { module = "io.opentelemetry.proto:opentelemetry-proto", version.ref = "otlp-proto" }
+clickhouse-client = { module = "com.clickhouse:client-v2", version.ref = "clickhouse" }
+clickhouse-jdbc = { module = "com.clickhouse:clickhouse-jdbc", version.ref = "clickhouse" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+jqwik = { module = "net.jqwik:jqwik", version.ref = "jqwik" }
+testcontainers-bom = { module = "org.testcontainers:testcontainers-bom", version.ref = "testcontainers" }
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependencies = { id = "io.spring.dependency-management", version.ref = "spring-dependencies" }
