@@ -108,10 +108,4 @@ make kind
 
 The verification script installs into a fresh project-owned cluster, runs a real k6 Job, checks the service-map API and nginx proxy, and reports the kubeconfig path when the cluster is retained. See [deployment instructions](docs/DEPLOYMENT.md) for access and cleanup.
 
-## Boundaries
 
-Trace finalization uses an idle heuristic. Missing parents and late/skewed data are flagged; a complete-looking tree cannot prove that no subtree was lost. Late kept spans revise trace metadata, while dependency metrics omit post-finalization contributions. The waterfall's critical path is synchronous timing attribution, not general asynchronous causal analysis.
-
-Crashes lose buffered spans, unflushed metrics and queued writes. Exporter loss, upstream sampling, replay after dedupe expiry and restarts can affect received-span metrics. Trace sampling retains observed errors, slow roots and a deterministic sample; late errors cannot reconstruct previously dropped traces. Alert exemplars can be unavailable.
-
-This is a local single-node system with synthetic load. Production hosting, multi-tenancy, high availability, durable ingest, arbitrary asynchronous tracing and scale guarantees are outside its verified scope. See [data contracts](docs/DATA_MODEL.md) and [tradeoffs](docs/TRADEOFFS.md).
